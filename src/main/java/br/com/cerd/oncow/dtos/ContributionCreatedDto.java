@@ -8,8 +8,13 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 public record ContributionCreatedDto(
-                                     @NotNull String name,
-                                     @NotNull BigDecimal amount,
-                                     @NotNull ContributionStatus status,
-                                     @NotNull LocalDateTime createdAt) {
+        Long id,
+        String name,
+        BigDecimal amount,
+        ContributionStatus status,
+        LocalDateTime createdAt,
+        String paymentId,
+        String pixPayload,
+        String qrCodeBase64,
+        String expirationDate) {
 }

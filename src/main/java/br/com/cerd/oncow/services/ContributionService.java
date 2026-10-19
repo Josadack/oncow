@@ -4,13 +4,16 @@ import br.com.cerd.oncow.dtos.ContributionCreatedDto;
 import br.com.cerd.oncow.dtos.ContributionListDto;
 import br.com.cerd.oncow.dtos.ContributionRequestDto;
 import br.com.cerd.oncow.dtos.ContributionResponseDto;
+import br.com.cerd.oncow.dtos.asaas.AsaasCreatePaymentRequest;
 import br.com.cerd.oncow.enums.ContributionStatus;
 import br.com.cerd.oncow.exceptions.ContributionNotFoundException;
 import br.com.cerd.oncow.models.ModelContribution;
 import br.com.cerd.oncow.repositories.ContributionRepository;
 import org.springframework.beans.BeanUtils;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -18,34 +21,59 @@ import java.util.stream.Collectors;
 @Service
 public class ContributionService {
 
-    private final ContributionRepository contributionRepository;
+    @Value("${asaas.customer.id}")
+    private String asaasCustomerId;
 
-    public ContributionService(ContributionRepository contributionRepository) {
+    private final ContributionRepository contributionRepository;
+    private final AsaasService asaasService;
+
+    public ContributionService(ContributionRepository contributionRepository, AsaasService asaasService) {
         this.contributionRepository = contributionRepository;
+        this.asaasService = asaasService;
     }
 
 /** Salvar todos **/
-    public ContributionCreatedDto criarContribution(ContributionRequestDto contributionDto){
-        // 1. Converte o DTO recebido para a Entidade
-        var modelContribution = new ModelContribution();
-        BeanUtils.copyProperties(contributionDto, modelContribution);
+public ContributionCreatedDto criarContribution(
+        ContributionRequestDto contributionDto
+) {
+    var modelContribution = new ModelContribution();
+    BeanUtils.copyProperties(contributionDto, modelContribution);
 
-        // define o status
-        modelContribution.setStatus(ContributionStatus.PENDING);
+    modelContribution.setStatus(ContributionStatus.PENDING);
+    modelContribution.setCreatedAt(LocalDateTime.now());
 
-        // criar
-        modelContribution.setCreatedAt(LocalDateTime.now());
+    // Salva a contribuição para obter o ID
+    var entidadeSalva = contributionRepository.save(modelContribution);
 
-        // 2. Salva a Entidade no banco e guarda o resultado retornado
-        var entidadeSalva = contributionRepository.save(modelContribution);
+    // Cria a cobrança PIX no Asaas
+    var requisicaoPagamento = new AsaasCreatePaymentRequest(
+            asaasCustomerId,
+            "PIX",
+            entidadeSalva.getAmount(),
+            LocalDate.now().plusDays(1)
+    );
 
-        return new ContributionCreatedDto(
-                entidadeSalva.getName(),
-                entidadeSalva.getAmount(),
-                entidadeSalva.getStatus(),
-                entidadeSalva.getCreatedAt()
-        );
-    }
+    var pagamento = asaasService.criarCobrancaPix(requisicaoPagamento);
+
+    // Salva o ID do pagamento retornado pelo Asaas
+    entidadeSalva.setPaymentId(pagamento.id());
+    entidadeSalva = contributionRepository.save(entidadeSalva);
+
+    // Busca o QR Code e o código PIX copia e cola
+    var qrCode = asaasService.buscarQrCodePix(pagamento.id());
+
+    return new ContributionCreatedDto(
+            entidadeSalva.getId(),
+            entidadeSalva.getName(),
+            entidadeSalva.getAmount(),
+            entidadeSalva.getStatus(),
+            entidadeSalva.getCreatedAt(),
+            entidadeSalva.getPaymentId(),
+            qrCode.payload(),
+            qrCode.encodedImage(),
+            qrCode.expirationDate()
+    );
+}
 
  /** Buscar todos **/
     public List<ContributionListDto> buscarContribution(){
