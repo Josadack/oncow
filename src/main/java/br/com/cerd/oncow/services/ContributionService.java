@@ -81,8 +81,10 @@ public ContributionCreatedDto criarContribution(
 
            return entidades.stream()
                    .map(entidade -> new ContributionListDto(
+                           entidade.getId(),
                            entidade.getName(),
-                           entidade.getAmount()
+                           entidade.getAmount(),
+                           entidade.getStatus()
                    ))
                    .collect(Collectors.toList());
     }
@@ -97,7 +99,8 @@ public ContributionCreatedDto criarContribution(
                entidade.getId(),
                entidade.getName(),
                entidade.getAmount(),
-               entidade.getPaymentId()
+               entidade.getPaymentId(),
+               entidade.getStatus()
        );
    }
 
